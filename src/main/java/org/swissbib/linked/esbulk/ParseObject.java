@@ -110,6 +110,10 @@ public class ParseObject extends ParseBase{
         return this.objectId;
     }
 
+    public void setResourceTpe(String resourceTpe) {
+        this.resourceTpe = resourceTpe;
+    }
+
     public String getResourceType () {
         return this.resourceTpe;
     }

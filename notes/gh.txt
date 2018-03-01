@@ -1,0 +1,8 @@
+
+Code RDF4j
+https://github.com/eclipse/rdf4j-tools
+
+
+
+slides Umgang mit RDF nicht ur in Java
+http://users.jyu.fi/~olkhriye/ties4520/lectures/Lecture05.pdf

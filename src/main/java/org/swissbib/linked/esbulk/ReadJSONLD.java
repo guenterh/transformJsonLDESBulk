@@ -5,6 +5,10 @@ import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonToken;
 
 import java.io.*;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Optional;
+import java.util.regex.Pattern;
 
 /**
  * Created by swissbib on 7/5/16.
@@ -12,76 +16,117 @@ import java.io.*;
 public class ReadJSONLD {
 
 
-    private StringBuilder gndObject;
+    private static String inputFile;
+    private static String outDir;
+    private static String indexType;
+    private static String indexName;
+    private static boolean printID;
 
-    public static void main (String [] args) {
+    private static Pattern pBlankNode = Pattern.compile("_:node");
 
+
+    public static void main (String [] args) throws Exception{
+
+
+
+        readProperties();
 
         JsonFactory jsonFactory = new JsonFactory();
 
 
 
         try {
-            JsonParser jsonParser = jsonFactory.createParser (new File("/home/swissbib/environment/data/gnd.json-ld.2016_07/GND.jsonld"));
-            //JsonParser jsonParser = jsonFactory.createParser (new File("/home/swissbib/environment/data/gnd.json-ld.2016_07/test.json"));
-            //JsonParser jsonParser = jsonFactory.createParser (new File("/home/swissbib/environment/data/gnd.json-ld.2016_07/short.jsonld"));
+            JsonParser jsonParser = jsonFactory.createParser (new File(inputFile));
 
 
             JsonToken currentToken = jsonParser.nextToken();
             StringBuilder myObjectString = null;
             int numberOfCreatedObjects = 0;
+            int numberTotal = 0;
+            int numberTotalBlankNode = 0;
             int numberOfFiles = 1;
 
 
             BufferedWriter bw = createOutputFile(numberOfFiles);
             while (currentToken != null) {
 
-                if (currentToken == JsonToken.START_OBJECT) {
-                    myObjectString = new StringBuilder();
+                try {
 
-                    ParseObject pO = new ParseObject(jsonParser);
-                    pO.fetchObjects();
+                    if (currentToken == JsonToken.START_OBJECT) {
 
-                    //if (numberOfCreatedObjects > 0) {
-                    //    myObjectString.append(",").append(pO.myObjectString);
-                    //} else {
-                    //    myObjectString.append(pO.myObjectString);
-                    //}
 
-                    numberOfCreatedObjects++;
-                    bw.write(String.format("{\"index\":{\"_index\":\"gnd\",\"_type\":\"%s\",\"_id\":\"%s\"}}", pO.getResourceType(),pO.getObjectId()));
-                    bw.newLine();
-                    bw.write(pO.getObjectString());
-                    bw.newLine();
-                    if (numberOfCreatedObjects % 20000 == 0) {
-                        bw.flush();
-                        bw.close();
-                        numberOfFiles++;
-                        bw = createOutputFile(numberOfFiles);
-                        numberOfCreatedObjects = 0;
 
+                        myObjectString = new StringBuilder();
+
+                        ParseObject pO = new ParseObject(jsonParser);
+                        pO.setResourceTpe(indexType);
+                        pO.fetchObjects();
+
+                        //if (numberOfCreatedObjects > 0) {
+                        //    myObjectString.append(",").append(pO.myObjectString);
+                        //} else {
+                        //    myObjectString.append(pO.myObjectString);
+                        //}
+
+
+                        numberOfCreatedObjects++;
+                        if (pBlankNode.matcher(pO.getObjectId()).find())
+                        {
+                            numberTotalBlankNode++;
+                            if (printID) {
+                                System.out.println(pO.getObjectId() + " created objects blank Node: " + numberTotalBlankNode);
+                            }
+
+
+                        } else {
+
+                            numberTotal++;
+                            if (printID) {
+                                System.out.println(pO.getObjectId() + " created objects: " + numberTotal);
+                            }
+
+
+                        }
+
+
+                        bw.write(String.format("{\"index\":{\"_index\":\"" + indexName + "\",\"_type\":\"%s\",\"_id\":\"%s\"}}", pO.getResourceType(),pO.getObjectId()));
+                        bw.newLine();
+                        bw.write(pO.getObjectString());
+                        bw.newLine();
+                        if (numberOfCreatedObjects % 20000 == 0) {
+                            bw.flush();
+                            bw.close();
+                            numberOfFiles++;
+                            bw = createOutputFile(numberOfFiles);
+                            numberOfCreatedObjects = 0;
+
+                        }
+
+                        numberOfCreatedObjects++;
+                        //System.out.println(myObjectString.toString()) ;
+
+                    } else if (currentToken == JsonToken.END_OBJECT) {
+                        if (myObjectString != null) {
+                            //myObjectString.append("},");
+
+
+                            throw new Exception("myObjectString not equal null in case of END_OBJECT - possible ?");
+                            //write into file
+
+
+                        } else {
+                            System.out.println("objectString on root level null while reaching END_OBJECT --> something went wrong");
+
+                        }
                     }
-
                     numberOfCreatedObjects++;
-                    //System.out.println(myObjectString.toString()) ;
-
-                } else if (currentToken == JsonToken.END_OBJECT) {
-                    if (myObjectString != null) {
-                        //myObjectString.append("},");
+                    currentToken = jsonParser.nextToken();
 
 
-                        System.out.println("is this possible?");
-                        //write into file
-
-
-                    } else {
-                        System.out.println("objectString on root level null while reaching END_OBJECT --> something went wrong");
-
-                    }
+                } catch (Throwable exceptionWhileParsing) {
+                    exceptionWhileParsing.printStackTrace();
                 }
 
-                numberOfCreatedObjects++;
-                currentToken = jsonParser.nextToken();
             }
             bw.flush();
             bw.close();
@@ -100,13 +145,34 @@ public class ReadJSONLD {
         BufferedWriter bw = null;
         String filePrefix = String.format("%010d",fileNumber);
         try {
-            bw = new BufferedWriter(new OutputStreamWriter(new FileOutputStream("out/" + filePrefix + "gnd.json"), "UTF-8"));
+            bw = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(outDir + "/" + filePrefix + "gnd.json"), "UTF-8"));
         } catch (FileNotFoundException | UnsupportedEncodingException ex) {
             ex.printStackTrace();
         }
 
 
         return bw;
+
+    }
+
+
+    private static void readProperties() throws Exception{
+
+        Optional<String> iF = Optional.ofNullable( System.getProperty("input.file", null));
+
+        if (! iF.isPresent() )
+            throw new Exception("no input.file property");
+        else
+            inputFile = iF.get();
+
+        indexName = System.getProperty("index.name", "gnd");
+
+        outDir = System.getProperty("out.dir", "outdir");
+
+        indexType = System.getProperty("index.type", "DEFAULT");
+
+        printID = Boolean.parseBoolean(System.getProperty("print.id", "false"));
+
 
     }
 
